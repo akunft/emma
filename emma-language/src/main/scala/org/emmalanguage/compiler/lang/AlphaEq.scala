@@ -99,15 +99,13 @@ trait AlphaEq extends Common {
               else failHere because s"Names of free symbols $lhSym and $rhSym differ"
           } yield eq
 
-        case ( // Synthetic ToolBox owner
-          _ withName api.TermName.exprOwner,
-          _ withName api.TermName.exprOwner
-          ) => pass
+        // Synthetic ToolBox owner
+        case _ if lhSym.name == api.TermName.exprOwner &&
+          rhSym.name == api.TermName.exprOwner => pass
 
-        case ( // Synthetic ToolBox owner
-          _ withName api.TermName.local,
-          _ withName api.TermName.local
-          ) => pass
+        // Synthetic ToolBox owner
+        case _ if lhSym.name == api.TermName.local &&
+          rhSym.name == api.TermName.local => pass
 
         case _ => for {
           eq <- if (dict contains lhSym) pass

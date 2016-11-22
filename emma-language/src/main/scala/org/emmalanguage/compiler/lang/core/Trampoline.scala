@@ -56,7 +56,7 @@ private[core] trait Trampoline extends Common {
         case core.Let(_, defs, _) =>
           (for (core.DefDef(method, _, tparams, paramss, _) <- defs) yield {
             val (own, nme, pos) = (method.owner, method.name, method.pos)
-            val flg = get.flags(method)
+            val flg = api.Sym.flags(method)
             val pss = paramss.map(_.map(_.symbol.asTerm))
             val Res = api.Type.kind1[TailRec](method.info.finalResultType)
             method -> api.DefSym(own, nme, flg, pos)(tparams: _*)(pss: _*)(Res)

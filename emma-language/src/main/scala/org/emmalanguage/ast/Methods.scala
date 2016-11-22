@@ -16,11 +16,11 @@
 package org.emmalanguage
 package ast
 
-/** Methods (`def`s). */
+/** Methods. */
 trait Methods { this: AST =>
 
   /**
-   * Methods (`def`s).
+   * Methods.
    *
    * === Examples ===
    * {{{
@@ -55,157 +55,145 @@ trait Methods { this: AST =>
    */
   trait MethodAPI { this: API =>
 
-    import u.Flag._
-    import u.internal.{newMethodSymbol, typeDef}
     import universe._
+    import internal._
+    import reificationSupport._
+    import Flag._
 
-    /** Method (`def`) symbols. */
+    /** Method symbols. */
     object DefSym extends Node {
 
       /**
-       * Creates a new method symbol.
-       * @param owner The enclosing named entity where this method is defined.
-       * @param name The name of this method (will be encoded).
-       * @param flags Any additional modifiers (e.g. access modifiers).
+       * Creates a type-checked method symbol.
+       * @param own The enclosing named entity where this method is defined.
+       * @param nme The name of this method (will be encoded).
+       * @param flg Any (optional) modifiers (e.g. implicit, private, protected, final).
        * @param pos The (optional) source code position where this method is defined.
-       * @param tparams The symbols of type parameters (to be copied with the new symbol as owner).
-       * @param paramss The symbols of all parameters (to be copied with the new symbol as owner).
-       * @param result The result type of this method.
-       * @return A new method symbol.
+       * @param tps The symbols of type parameters (to be copied with the new symbol as owner).
+       * @param pss The symbols of all parameters (to be copied with the new symbol as owner).
+       * @param res The result type of this method (Unit by default).
+       * @param ans Any (optional) annotations assocated with this method.
+       * @return A new type-checked method symbol.
        */
-      def apply(owner: u.Symbol, name: u.TermName,
-        flags: u.FlagSet = u.NoFlags,
-        pos: u.Position = u.NoPosition)
-        (tparams: u.TypeSymbol*)
-        (paramss: Seq[u.TermSymbol]*)
-        (result: u.Type): u.MethodSymbol = {
-
-        assert(are.not(CONTRAVARIANT)(flags), s"$this `$name` cannot be a label")
-        val method = newMethodSymbol(owner, TermName(name), pos, flags)
-        val tps = tparams.map(Sym.copy(_)(owner = method, flags = DEFERRED | PARAM).asType)
-        val pss = paramss.map(_.map(Sym.copy(_)(owner = method, flags = PARAM).asTerm))
-        set.tpe(method, Type.method(tps: _*)(pss: _*)(result))
-        method
+      def apply(own: u.Symbol, nme: u.TermName,
+        tps: Seq[u.TypeSymbol]      = Seq.empty,
+        pss: Seq[Seq[u.TermSymbol]] = Seq.empty,
+        res: u.Type                 = Type.unit,
+        flg: u.FlagSet              = u.NoFlags,
+        pos: u.Position             = u.NoPosition,
+        ans: Seq[u.Annotation]      = Seq.empty
+      ): u.MethodSymbol = {
+        assert(are.not(CONTRAVARIANT)(flg), s"$this $nme cannot be a label")
+        val method  = newMethodSymbol(own, TermName(nme), pos, flg)
+        val tparams = tps.map(Sym.With(_)(own = method, flg = DEFERRED | PARAM).asType)
+        val paramss = pss.map(_.map(Sym.With(_)(own = method, flg = PARAM).asTerm))
+        setInfo(method, Type.method(tparams, paramss, res))
+        setAnnotations(method, ans.toList)
       }
 
       def unapply(sym: u.MethodSymbol): Option[u.MethodSymbol] =
         Option(sym).filter(is.method)
     }
 
-    /** Method (`def`) calls. */
+    /** Method calls. */
     object DefCall extends Node {
 
       /**
        * Creates a type-checked method call
        * @param target The (optional) target (must be a term if any).
        * @param method Must be a method symbol or an overloaded symbol.
-       * @param targs The type arguments (if the method is generic).
-       * @param argss All argument lists (partial application not supported).
+       * @param targs  The type arguments (if the method is generic).
+       * @param argss  All argument lists (partial application not supported).
        * @return `[target.]method[..targs](...argss)`.
        */
-      def apply(target: Option[u.Tree] = None)
-        (method: u.TermSymbol, targs: u.Type*)
-        (argss: Seq[u.Tree]*): u.Tree = {
-
+      def apply(target: Option[u.Tree], method: u.TermSymbol,
+        targs: Seq[u.Type]      = Seq.empty,
+        argss: Seq[Seq[u.Tree]] = Seq.empty
+      ): u.Tree = {
         val fun = target match {
           case Some(tgt) =>
-            assert(is.defined(tgt), s"$this target is not defined: $tgt")
-            assert(is.term(tgt), s"$this target is not a term:\n${Tree.show(tgt)}")
-            assert(has.tpe(tgt), s"$this target has no type:\n${Tree.showTypes(tgt)}")
-            val resolved = Sym.resolveOverloaded(tgt.tpe)(method, targs: _*)(argss: _*)
-            assert(is.method(resolved), s"$this resolved variant `$resolved` is not a method")
+            assert(is.defined(tgt),   s"$this target is not defined")
+            assert(is.term(tgt),      s"$this target is not a term:\n${Tree.show(tgt)}")
+            assert(has.tpe(tgt),      s"$this target has no type:\n${Tree.showTypes(tgt)}")
+            val resolved = Sym.resolveOverloaded(tgt.tpe, method, targs, argss)
+            assert(resolved.isMethod, s"$this resolved variant $resolved is not a method")
             Sel(tgt, resolved)
 
           case None =>
-            val resolved = Sym.resolveOverloaded()(method, targs: _*)(argss: _*)
-            assert(is.method(resolved), s"$this resolved variant `$resolved` is not a method")
+            val resolved = Sym.resolveOverloaded(Type.none, method, targs, argss)
+            assert(resolved.isMethod, s"$this resolved variant $resolved is not a method")
             Id(resolved)
         }
 
-        val app = TermApp(fun, targs: _*)(argss: _*)
-        set(app, tpe = app.tpe.finalResultType)
-        app
+        val app = TermApp(fun, targs, argss)
+        setType(app, app.tpe.finalResultType)
       }
 
-      def unapplySeq(call: u.Tree)
-        : Option[(Option[u.Tree], u.MethodSymbol, Seq[u.Type], Seq[Seq[u.Tree]])] = call match {
-
-        case Id(DefSym(method)) withType Type.Result(_) =>
-          Some(None, method, Seq.empty, Seq.empty)
-        case Sel(Term(target), DefSym(method)) withType Type.Result(_) =>
-          Some(Some(target), method, Seq.empty, Seq.empty)
-        case TermApp(Id(DefSym(method)), targs, argss@_*) withType Type.Result(_) =>
-          Some(None, method, targs, argss)
-        case TermApp(Sel(Term(target), DefSym(method)), targs, argss@_*) withType Type.Result(_) =>
-          Some(Some(target), method, targs, argss)
-        case _ => None
-      }
+      def unapply(call: u.Tree)
+        : Option[(Option[u.Tree], u.MethodSymbol, Seq[u.Type], Seq[Seq[u.Tree]])]
+        = if (!is.result(call.tpe)) None else call match {
+          case Id(DefSym(method)) =>
+            Some(None, method, Seq.empty, Seq.empty)
+          case Sel(Term(target), DefSym(method)) =>
+            Some(Some(target), method, Seq.empty, Seq.empty)
+          case TermApp(Id(DefSym(method)), targs, argss) =>
+            Some(None, method, targs, argss)
+          case TermApp(Sel(Term(target), DefSym(method)), targs, argss) =>
+            Some(Some(target), method, targs, argss)
+          case _ => None
+        }
     }
 
-    /** Method (`def`) definitions. */
+    /** Method definitions. */
     object DefDef extends Node {
 
       /**
        * Creates a type-checked method definition.
-       * @param sym Must be a method symbol.
-       * @param flags Any additional modifiers (e.g. access modifiers).
+       * @param method  Must be a method symbol.
        * @param tparams The symbols of type parameters (to be substituted with `sym.typeParams`).
        * @param paramss The symbols of all parameters (to be substituted with `sym.paramLists`).
        * @param body The body of this method (with parameters substituted), owned by `sym`.
        * @return `..flags def method[..tparams](...paramss) = body`.
        */
-      def apply(sym: u.MethodSymbol, flags: u.FlagSet = u.NoFlags)
-        (tparams: u.TypeSymbol*)
-        (paramss: Seq[u.TermSymbol]*)
-        (body: u.Tree): u.DefDef = {
-
-        assert(is.defined(sym), s"$this symbol `$sym` is not defined")
-        assert(is.method(sym), s"$this symbol `$sym` is not a method")
-        assert(has.name(sym), s"$this symbol `$sym` has no name")
-        assert(is.encoded(sym), s"$this symbol `$sym` is not encoded")
-        assert(has.tpe(sym), s"$this symbol `$sym` has no type")
-        assert(tparams.forall(is.defined), s"Not all $this type parameters are defined")
+      def apply(method: u.MethodSymbol,
+        tparams: Seq[u.TypeSymbol]      = Seq.empty,
+        paramss: Seq[Seq[u.TermSymbol]] = Seq.empty,
+        body:    u.Tree                 = Term.unit
+      ): u.DefDef = {
+        assert(is.defined(method), s"$this method is not defined")
+        assert(is.method(method),  s"$this method $method is not a method")
+        assert(has.name(method),   s"$this method $method has no name")
+        assert(is.encoded(method), s"$this method $method is not encoded")
+        assert(has.tpe(method),    s"$this method $method has no type")
+        assert(tparams.forall(is.defined),         s"Not all $this type parameters are defined")
         assert(paramss.flatten.forall(is.defined), s"Not all $this parameters are defined")
-        assert(have.name(paramss.flatten), s"Not all $this parameters have names")
-        assert(paramss.flatten.forall(has.tpe), s"Not all $this parameters have types")
-        assert(is.defined(body), s"$this body is not defined: $body")
-        assert(is.term(body), s"$this body is not a term:\n${Tree.show(body)}")
-        assert(has.tpe(body), s"$this body has no type:\n${Tree.showTypes(body)}")
-        assert(tparams.size == sym.typeParams.size, s"Wrong number of $this type parameters")
-        assert(paramss.size == sym.paramLists.size, s"Wrong number of $this parameter lists")
-        assert(paramss.flatten.size == sym.paramLists.flatten.size,
+        assert(have.name(paramss.flatten),         s"Not all $this parameters have names")
+        assert(paramss.flatten.forall(has.tpe),    s"Not all $this parameters have types")
+        assert(is.defined(body), s"$this body is not defined")
+        assert(is.term(body),    s"$this body is not a term:\n${Tree.show(body)}")
+        assert(has.tpe(body),    s"$this body has no type:\n${Tree.showTypes(body)}")
+        assert(tparams.size == method.typeParams.size, s"Wrong number of $this type parameters")
+        assert(paramss.size == method.paramLists.size, s"Wrong number of $this parameter lists")
+        assert(paramss.flatten.size == method.paramLists.flatten.size,
           s"Shape of $this parameter lists doesn't match")
-        assert({
-          val tpMap = (tparams.map(_.toType) zip sym.typeParams.map(_.asType.toType))
-            .toMap.withDefault(identity[u.Type])
-          (paramss.flatten zip sym.paramLists.flatten)
-            .forall { case (p, q) => p.info.map(tpMap) =:= q.info }
-        }, s"Not all $this parameters have the correct type")
 
-        val mods = u.Modifiers(get.flags(sym) | flags)
-        val tpeDefs = sym.typeParams.map(typeDef)
-        val parDefs = sym.paramLists.map(_.map(p => ParDef(p.asTerm)))
-        val original = tparams ++ paramss.flatten
-        val aliases = sym.typeParams ++ sym.paramLists.flatten
-        val rhs = Sym.subst(sym, original zip aliases: _*)(body)
-        val res = sym.info.finalResultType
-        assert(rhs.tpe <:< sym.info.finalResultType,
-          s"$this body type `${rhs.tpe}` is not a subtype of return type `$res`")
-
-        val defn = u.DefDef(mods, sym.name, tpeDefs, parDefs, TypeQuote(res), rhs)
-        set(defn, sym = sym)
-        defn
+        val tps = method.typeParams.map(typeDef)
+        val pss = method.paramLists.map(_.map(p => ParDef(p.asTerm)))
+        val src = tparams ++ paramss.flatten
+        val dst = method.typeParams ++ method.paramLists.flatten
+        val rhs = Sym.subst(method, src zip dst)(body)
+        val res = method.info.finalResultType
+        assert(rhs.tpe <:< res, s"$this body type ${rhs.tpe} is not a subtype of return type $res")
+        val tpt = TypeQuote(res)
+        val dfn = u.DefDef(Sym.mods(method), method.name, tps, pss, tpt, rhs)
+        setSymbol(dfn, method)
       }
 
       def unapply(defn: u.DefDef)
-        : Option[(u.MethodSymbol, u.FlagSet, Seq[u.TypeSymbol], Seq[Seq[u.ValDef]], u.Tree)]
+        : Option[(u.MethodSymbol, Seq[u.TypeSymbol], Seq[Seq[u.ValDef]], u.Tree)]
         = defn match {
-          case defDef@u.DefDef(mods, _, tparams, paramss, _, Term(body)) withSym DefSym(method) =>
-            assert(paramss forall { _ forall { _.rhs == Empty() } },
-              "DefDef parameters with default parameter values are not supported.")
-            assert(defDef.name.toString != "<init>", "DefDef.unapply encountered a constructor. " +
-              "This shouldn't happen, since we don't allow class definitions in the source language.")
-            Some(method, mods.flags, tparams.map(TypeSym.of), paramss, body)
+          case u.DefDef(_, _, tparams, paramss, _, Term(body)) =>
+            Some(defn.symbol.asMethod, tparams.map(_.symbol.asType), paramss, body)
           case _ => None
         }
     }

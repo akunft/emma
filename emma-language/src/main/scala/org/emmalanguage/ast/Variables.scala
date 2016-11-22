@@ -16,11 +16,11 @@
 package org.emmalanguage
 package ast
 
-/** Variables (`var`s). */
+/** Variables. */
 trait Variables { this: AST =>
 
   /**
-   * Variables (`var`s).
+   * Variables.
    *
    * === Examples ===
    * {{{
@@ -35,33 +35,37 @@ trait Variables { this: AST =>
   trait VariableAPI { this: API =>
 
     import universe._
-    import u.Flag._
+    import internal._
+    import reificationSupport._
+    import Flag._
 
-    /** Variable (`var`) symbols. */
+    /** Variable symbols. */
     object VarSym extends Node {
 
       /**
-       * Creates a new variable symbol.
-       * @param owner The enclosing named entity where this variable is defined.
-       * @param name The name of this variable (will be encoded).
+       * Creates a type-checked variable symbol.
+       * @param own The enclosing named entity where this variable is defined.
+       * @param nme The name of this variable (will be encoded).
        * @param tpe The type of this variable (will be dealiased and widened).
-       * @param flags Any additional modifiers (cannot be parameter).
+       * @param flg Any (optional) modifiers (e.g. private, protected).
        * @param pos The (optional) source code position where this variable is defined.
-       * @return A new variable symbol.
+       * @param ans Any (optional) annotations associated with this variable.
+       * @return A new type-checked variable symbol.
        */
-      def apply(owner: u.Symbol, name: u.TermName, tpe: u.Type,
-        flags: u.FlagSet = u.NoFlags,
-        pos: u.Position = u.NoPosition): u.TermSymbol = {
-
-        assert(are.not(PARAM)(flags), s"$this `$name` cannot be a parameter")
-        BindingSym(owner, name, tpe, flags | MUTABLE, pos)
+      def apply(own: u.Symbol, nme: u.TermName, tpe: u.Type,
+        flg: u.FlagSet         = u.NoFlags,
+        pos: u.Position        = u.NoPosition,
+        ans: Seq[u.Annotation] = Seq.empty
+      ): u.TermSymbol = {
+        assert(are.not(PARAM)(flg), s"$this $nme cannot be a parameter")
+        BindingSym(own, nme, tpe, flg | MUTABLE, pos, ans)
       }
 
       def unapply(sym: u.TermSymbol): Option[u.TermSymbol] =
         Option(sym).filter(is.variable)
     }
 
-    /** Variable (`var`) references. */
+    /** Variable references. */
     object VarRef extends Node {
 
       /**
@@ -70,8 +74,8 @@ trait Variables { this: AST =>
        * @return `target`.
        */
       def apply(target: u.TermSymbol): u.Ident = {
-        assert(is.defined(target), s"$this target `$target` is not defined")
-        assert(is.variable(target), s"$this target `$target` is not a variable")
+        assert(is.defined(target),  s"$this target is not defined")
+        assert(is.variable(target), s"$this target $target is not a variable")
         BindingRef(target)
       }
 
@@ -81,31 +85,29 @@ trait Variables { this: AST =>
       }
     }
 
-    /** Variable (`var`) definitions. */
+    /** Variable definitions. */
     object VarDef extends Node {
 
       /**
        * Creates a type-checked variable definition.
        * @param lhs Must be a variable symbol.
        * @param rhs The initial value of this variable, owned by `lhs`.
-       * @param flags Any additional modifiers (cannot be parameter).
-       * @return `..flags var lhs = rhs`.
+       * @return `var lhs = rhs`.
        */
-      def apply(lhs: u.TermSymbol, rhs: u.Tree, flags: u.FlagSet = u.NoFlags): u.ValDef = {
-        assert(is.defined(lhs), s"$this LHS `$lhs` is not defined")
-        assert(is.variable(lhs), s"$this LHS `$lhs` is not a variable")
-        assert(are.not(PARAM)(flags), s"$this LHS `$lhs` cannot be a parameter")
-        assert(is.defined(rhs), s"$this RHS is not defined: $rhs")
-        BindingDef(lhs, rhs, flags)
+      def apply(lhs: u.TermSymbol, rhs: u.Tree): u.ValDef = {
+        assert(is.defined(lhs),  s"$this LHS is not defined")
+        assert(is.variable(lhs), s"$this LHS $lhs is not a variable")
+        assert(is.defined(rhs),  s"$this RHS is not defined")
+        BindingDef(lhs, rhs)
       }
 
-      def unapply(bind: u.ValDef): Option[(u.TermSymbol, u.Tree, u.FlagSet)] = bind match {
-        case BindingDef(VarSym(lhs), rhs, flags) => Some(lhs, rhs, flags)
+      def unapply(bind: u.ValDef): Option[(u.TermSymbol, u.Tree)] = bind match {
+        case BindingDef(VarSym(lhs), Term(rhs)) => Some(lhs, rhs)
         case _ => None
       }
     }
 
-    /** Variable (`var`) mutations (assignments). */
+    /** Variable mutations (assignments). */
     object VarMut extends Node {
 
       /**
@@ -115,18 +117,18 @@ trait Variables { this: AST =>
        * @return `lhs = rhs`.
        */
       def apply(lhs: u.TermSymbol, rhs: u.Tree): u.Assign = {
-        assert(is.defined(lhs), s"$this LHS `$lhs` is not defined")
-        assert(is.variable(lhs), s"$this LHS `$lhs` is not a variable")
-        assert(is.defined(rhs), s"$this RHS is not defined:\n$rhs")
-        assert(is.term(rhs), s"$this RHS is not a term:\n${Tree.show(rhs)}")
-        assert(has.tpe(lhs), s"$this LHS `$lhs` has no type")
-        assert(has.tpe(rhs), s"$this RHS has no type:\n${Tree.showTypes(rhs)}")
-        assert(rhs.tpe <:< lhs.info,
-          s"$this LH type `${lhs.info}` is not a supertype of RH type `${rhs.tpe}`")
-
+        assert(is.defined(lhs),  s"$this LHS is not defined")
+        assert(is.variable(lhs), s"$this LHS $lhs is not a variable")
+        assert(is.defined(rhs),  s"$this RHS is not defined")
+        assert(is.term(rhs),     s"$this RHS is not a term:\n${Tree.show(rhs)}")
+        assert(has.tpe(lhs),     s"$this LHS $lhs has no type")
+        assert(has.tpe(rhs),     s"$this RHS has no type:\n${Tree.showTypes(rhs)}")
+        assert(rhs.tpe <:< lhs.info, s"""
+          |$this LHS $lhs of type ${lhs.info} cannot be assigned from RHS of type ${rhs.tpe}:
+          |${Tree.showTypes(rhs)}
+          |""".stripMargin.trim)
         val mut = u.Assign(VarRef(lhs), rhs)
-        set(mut, tpe = u.NoType)
-        mut
+        setType(mut, Type.none)
       }
 
       def unapply(mut: u.Assign): Option[(u.TermSymbol, u.Tree)] = mut match {

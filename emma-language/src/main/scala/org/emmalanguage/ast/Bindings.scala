@@ -40,24 +40,27 @@ trait Bindings { this: AST =>
   trait BindingAPI { this: API =>
 
     import universe._
-    import u.Flag._
+    import internal._
+    import reificationSupport._
 
     /** Binding symbols (values, variables and parameters). */
     object BindingSym extends Node {
 
       /**
-       * Creates a new binding symbol.
-       * @param owner The enclosing named entity where this binding is defined.
-       * @param name The name of this binding (will be encoded).
+       * Creates a type-checked binding symbol.
+       * @param own The enclosing named entity where this binding is defined.
+       * @param nme The name of this binding (will be encoded).
        * @param tpe The type of this binding (will be dealiased and widened).
-       * @param flags Any additional modifiers (distinguish between vals, vars and parameters).
+       * @param flg Any (optional) modifiers (e.g. val, var, param, lazy, implicit).
        * @param pos The (optional) source code position where this binding is defined.
-       * @return A new binding symbol.
+       * @param ans Any (optional) annotations associated with this binding.
+       * @return A new type-checked binding symbol.
        */
-      def apply(owner: u.Symbol, name: u.TermName, tpe: u.Type,
-        flags: u.FlagSet = u.NoFlags,
-        pos: u.Position = u.NoPosition): u.TermSymbol
-        = TermSym(owner, name, tpe, flags, pos)
+      def apply(own: u.Symbol, nme: u.TermName, tpe: u.Type,
+        flg: u.FlagSet         = u.NoFlags,
+        pos: u.Position        = u.NoPosition,
+        ans: Seq[u.Annotation] = Seq.empty
+      ): u.TermSymbol = TermSym(own, nme, tpe, flg, pos, ans)
 
       def unapply(sym: u.TermSymbol): Option[u.TermSymbol] =
         Option(sym).filter(is.binding)
@@ -72,8 +75,8 @@ trait Bindings { this: AST =>
        * @return `target`.
        */
       def apply(target: u.TermSymbol): u.Ident = {
-        assert(is.defined(target), s"$this target `$target` is not defined")
-        assert(is.binding(target), s"$this target `$target` is not a binding")
+        assert(is.defined(target), s"$this target is not defined")
+        assert(is.binding(target), s"$this target $target is not a binding")
         TermRef(target)
       }
 
@@ -90,40 +93,35 @@ trait Bindings { this: AST =>
        * Creates a type-checked binding definition.
        * @param lhs Must be a binding symbol.
        * @param rhs The value of this binding (empty by default), owned by `lhs`.
-       * @param flags Any additional modifiers (distinguish values, variables and parameters).
-       * @return `..flags [val|var] lhs [= rhs]`.
+       * @return `[val|var] lhs [= rhs]`.
        */
-      def apply(lhs: u.TermSymbol,
-        rhs: u.Tree = Empty(),
-        flags: u.FlagSet = u.NoFlags): u.ValDef = {
-
-        assert(is.defined(lhs), s"$this LHS `$lhs` is not defined")
-        assert(is.binding(lhs), s"$this LHS `$lhs` is not a binding")
-        assert(has.name(lhs), s"$this LHS `$lhs` has no name")
-        assert(has.tpe(lhs), s"$this LHS `$lhs` has no type")
-        assert(is.encoded(lhs), s"$this LHS `$lhs` is not encoded")
-        val mods = u.Modifiers(get.flags(lhs) | flags)
-        assert(!mods.hasFlag(LAZY), s"$this LHS `$lhs` cannot be lazy")
-        val body = if (is.defined(rhs)) {
+      def apply(lhs: u.TermSymbol, rhs: u.Tree = Empty()): u.ValDef = {
+        assert(is.defined(lhs), s"$this LHS is not defined")
+        assert(is.binding(lhs), s"$this LHS $lhs is not a binding")
+        assert(has.name(lhs),   s"$this LHS $lhs has no name")
+        assert(has.tpe(lhs),    s"$this LHS $lhs has no type")
+        assert(is.encoded(lhs), s"$this LHS $lhs is not encoded")
+        assert(!lhs.isLazy,     s"$this LHS $lhs cannot be lazy")
+        val (body, tpt) = if (is.defined(rhs)) {
           assert(is.term(rhs), s"$this RHS is not a term:\n${Tree.show(rhs)}")
           assert(has.tpe(rhs), s"$this RHS has no type:\n${Tree.showTypes(rhs)}")
           assert(rhs.tpe <:< lhs.info, s"""
-            |$this LH type `${lhs.info}` is not a supertype of RH type `${rhs.tpe}`.
-            |(lhs: `$lhs`, rhs:\n`${u.showCode(rhs)}`\n)
+            |$this LHS $lhs of type ${lhs.info} cannot be assigned from RHS of type ${rhs.tpe}:
+            |${Tree.showTypes(rhs)}
             |""".stripMargin.trim)
-          Owner.at(lhs)(rhs)
-        } else Empty()
-        val needsTpt = is.param(lhs) || !(lhs.info =:= rhs.tpe)
-        val tpt = if (needsTpt) TypeQuote(lhs.info) else u.TypeTree()
-        val bind = u.ValDef(mods, lhs.name, tpt, body)
-        set(bind, sym = lhs)
-        bind
+          val tpt = if (lhs.info =:= rhs.tpe) TypeQuote.empty else TypeQuote(lhs.info)
+          (Owner.at(lhs)(rhs), tpt)
+        } else {
+          assert(lhs.isParameter, s"$this RHS cannot be empty")
+          (Empty(), TypeQuote(lhs.info))
+        }
+
+        val bind = u.ValDef(Sym.mods(lhs), lhs.name, tpt, body)
+        setSymbol(bind, sym = lhs)
       }
 
-      def unapply(bind: u.ValDef): Option[(u.TermSymbol, u.Tree, u.FlagSet)] = bind match {
-        case u.ValDef(mods, _, _, Term(rhs)) withSym BindingSym(lhs) => Some(lhs, rhs, mods.flags)
-        case _ => None
-      }
+      def unapply(bind: u.ValDef): Option[(u.TermSymbol, u.Tree)] =
+        Some(bind.symbol.asTerm, bind.rhs)
     }
   }
 }

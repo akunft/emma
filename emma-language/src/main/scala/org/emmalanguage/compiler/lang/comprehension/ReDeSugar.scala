@@ -56,14 +56,14 @@ private[comprehension] trait ReDeSugar extends Common {
         lambdas: Map[u.TermSymbol, (u.TermSymbol, u.Tree)]) = {
 
         lambdas.get(f).map { case (arg, body) =>
-          val sym = api.Sym.copy(arg)(flags = u.NoFlags).asTerm
+          val sym = api.Sym.With(arg)(flg = u.NoFlags).asTerm
           sym -> api.Tree.rename(arg -> sym)(body)
         }.getOrElse {
           val nme = api.TermName.fresh("x")
-          val tpe = api.Type.result(f.info)
+          val tpe = f.info.dealias.widen.typeArgs.last
           val arg = api.ValSym(owner, nme, tpe)
           val tgt = Some(core.ValRef(f))
-          val app = api.Term.member(f, api.TermName.app).asMethod
+          val app = f.info.member(api.TermName.app).asMethod
           arg -> core.DefCall(tgt)(app)(Seq(core.ValRef(arg)))
         }
       }

@@ -124,11 +124,11 @@ private[source] trait SourceValidate extends Common {
       // ---------------------------------------------------------------------------
 
       lazy val ModuleRef: Validator = {
-        case src.ModuleRef(_) => pass
+        case src.ModRef(_) => pass
       }
 
       lazy val ModuleAcc: Validator = {
-        case src.ModuleAcc(target, _) =>
+        case src.ModAcc(target, _) =>
           target is Term otherwise s"Invalid ${src.ModuleAcc} target"
       }
 

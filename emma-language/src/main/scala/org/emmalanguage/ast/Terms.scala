@@ -28,18 +28,18 @@ trait Terms { this: AST =>
     object TermName extends Node {
 
       // Predefined term names
-      lazy val anon = apply("anon")
-      lazy val app = apply("apply")
-      lazy val empty = u.termNames.EMPTY
-      lazy val exprOwner = u.TermName("<expression-owner>")
-      lazy val foreach = apply("foreach")
-      lazy val init = u.termNames.CONSTRUCTOR
-      lazy val lambda = apply("anonfun")
-      lazy val local = u.TermName(s"<local $exprOwner>")
-      lazy val root = u.termNames.ROOTPKG
-      lazy val unApp = apply("unapply")
-      lazy val unAppSeq = apply("unapplySeq")
-      lazy val wildcard = u.termNames.WILDCARD
+      val anon      = apply("anon")
+      val app       = apply("apply")
+      val empty     = u.termNames.EMPTY
+      val exprOwner = u.TermName("<expression-owner>")
+      val foreach   = apply("foreach")
+      val init      = u.termNames.CONSTRUCTOR
+      val lambda    = apply("anonfun")
+      val local     = u.TermName(s"<local $exprOwner>")
+      val root      = u.termNames.ROOTPKG
+      val unApp     = apply("unapply")
+      val unAppSeq  = apply("unapplySeq")
+      val wildcard  = u.termNames.WILDCARD
 
       /** Creates a new term name (must be non-empty). */
       def apply(name: String): u.TermName = {
@@ -49,14 +49,14 @@ trait Terms { this: AST =>
 
       /** Encodes `name` and converts it to a term name. */
       def apply(name: u.Name): u.TermName = {
-        assert(is.defined(name), s"Undefined name `$name`")
+        assert(is.defined(name), "Undefined name")
         name.encodedName.toTermName
       }
 
       /** Extracts the term name of `sym`, if any. */
       def apply(sym: u.Symbol): u.TermName = {
-        assert(is.defined(sym), s"Undefined symbol `$sym`")
-        assert(has.name(sym), s"Symbol `$sym` has no name")
+        assert(is.defined(sym), "Undefined symbol")
+        assert(has.name(sym),  s"Symbol $sym has no name")
         apply(sym.name)
       }
 
@@ -68,14 +68,14 @@ trait Terms { this: AST =>
 
       /** Creates a fresh term name with the given `prefix`. */
       def fresh(prefix: u.Name): u.TermName = {
-        assert(is.defined(prefix), s"Undefined prefix `$prefix`")
+        assert(is.defined(prefix), s"Undefined prefix")
         fresh(prefix.toString)
       }
 
       /** Creates a fresh term name with the given symbol's name as `prefix`. */
       def fresh(prefix: u.Symbol): u.TermName = {
-        assert(is.defined(prefix), s"Undefined prefix `$prefix`")
-        assert(has.name(prefix), s"Prefix `$prefix` has no name")
+        assert(is.defined(prefix), "Undefined prefix")
+        assert(has.name(prefix),  s"Prefix $prefix has no name")
         fresh(prefix.name)
       }
 
@@ -87,46 +87,47 @@ trait Terms { this: AST =>
     object TermSym extends Node {
 
       /**
-       * Creates a new term symbol.
-       * @param owner The symbol of the enclosing named entity where this term is defined.
-       * @param name The name of this term (will be encoded).
+       * Creates a type-checked term symbol.
+       * @param own The symbol of the enclosing named entity where this term is defined.
+       * @param nme The name of this term (will be encoded).
        * @param tpe The type of this term (will be dealiased and widened).
-       * @param flags Any additional modifiers (e.g. mutable, parameter, implicit).
+       * @param flg Any (optional) modifiers (e.g. var, parameter, implicit).
        * @param pos The (optional) source code position where this term is defined.
-       * @return A new term symbol.
+       * @param ans Any (optional) annotations associated with this term.
+       * @return A new type-checked term symbol.
        */
-      def apply(owner: u.Symbol, name: u.TermName, tpe: u.Type,
-        flags: u.FlagSet = u.NoFlags,
-        pos: u.Position = u.NoPosition
+      def apply(own: u.Symbol, nme: u.TermName, tpe: u.Type,
+        flg: u.FlagSet         = u.NoFlags,
+        pos: u.Position        = u.NoPosition,
+        ans: Seq[u.Annotation] = Seq.empty
       ): u.TermSymbol = {
-        assert(is.defined(name), s"$this name `$name` is not defined")
-        assert(is.defined(tpe), s"$this type `$tpe` is not defined")
-        val sym = newTermSymbol(owner, TermName(name), pos, flags)
+        assert(is.defined(nme), s"$this name is not defined")
+        assert(is.defined(tpe), s"$this type is not defined")
+        val sym = newTermSymbol(own, TermName(nme), pos, flg)
         setInfo(sym, tpe.dealias.widen)
-      }
-
-      /** Extracts the term symbol of `tree`, if any. */
-      def of[T <: u.Tree](tree: T): u.TermSymbol = {
-        val sym = Sym.of(tree)
-        assert(is.term(sym), s"Symbol `$sym` is not a term")
-        sym.asTerm
+        setAnnotations(sym, ans.toList)
       }
 
       /** Creates a free term symbol (without an owner). */
-      def free(name: u.TermName, tpe: u.Type, flags: u.FlagSet = u.NoFlags): u.FreeTermSymbol = {
-        assert(is.defined(name), s"$this name `$name` is not defined")
-        assert(is.defined(tpe), s"$this type `$tpe` is not defined")
-        val free = internal.newFreeTerm(TermName(name).toString, null, flags, null)
+      def free(name: u.TermName, tpe: u.Type,
+        flg: u.FlagSet         = u.NoFlags,
+        pos: u.Position        = u.NoPosition,
+        ans: Seq[u.Annotation] = Seq.empty
+      ): u.FreeTermSymbol = {
+        assert(is.defined(name), s"$this name is not defined")
+        assert(is.defined(tpe),  s"$this type is not defined")
+        val free = internal.newFreeTerm(TermName(name).toString, null, flg, null)
         setInfo(free, tpe.dealias.widen)
+        setAnnotations(free, ans.toList)
       }
 
-      /** Creates a free term symbol with the same attributes as the `original`. */
-      def free(original: u.TermSymbol): u.FreeTermSymbol =
-        free(TermName(original), original.info, get.flags(original))
+      /** Creates a free term symbol with the same attributes as the `origin`. */
+      def free(origin: u.TermSymbol): u.FreeTermSymbol =
+        free(TermName(origin), origin.info, flags(origin), origin.pos, origin.annotations)
 
-      /** Creates a fresh term symbol with the same attributes as the `original`. */
-      def fresh(original: u.TermSymbol): u.TermSymbol =
-        Sym.copy(original)(name = TermName.fresh(original)).asTerm
+      /** Creates a fresh term symbol with the same attributes as the `origin`. */
+      def fresh(origin: u.TermSymbol): u.TermSymbol =
+        Sym.With(origin)(nme = TermName.fresh(origin)).asTerm
 
       def unapply(sym: u.TermSymbol): Option[u.TermSymbol] =
         Option(sym)
@@ -135,21 +136,7 @@ trait Terms { this: AST =>
     object Term extends Node {
 
       // Predefined terms
-      lazy val unit = Lit(())
-
-      /** Looks for `member` in `target` and returns its symbol (possibly overloaded). */
-      def member(target: u.Type, member: u.TermName): u.TermSymbol = {
-        assert(is.defined(target), s"Undefined target `$target`")
-        assert(is.defined(member), s"Undefined term member `$member`")
-        target.member(member).asTerm
-      }
-
-      /** Looks for `member` in `target` and returns its symbol (possibly overloaded). */
-      def member(target: u.Symbol, member: u.TermName): u.TermSymbol = {
-        assert(is.defined(target), s"Undefined target `$target`")
-        assert(has.tpe(target), s"Target `$target` has no type")
-        Term.member(target.info, member)
-      }
+      val unit = Lit(())
 
       def unapply(tree: u.Tree): Option[u.Tree] =
         Option(tree).filter(is.term)
@@ -159,7 +146,7 @@ trait Terms { this: AST =>
     private[ast] object TermApp extends Node {
 
       def apply(target: u.Tree, args: Seq[u.Tree]): u.Apply = {
-        assert(is.defined(target), s"$this target is not defined: $target")
+        assert(is.defined(target), s"$this target is not defined")
         assert(has.sym(target),    s"$this target has no symbol:\n${Tree.showSymbols(target)}")
         assert(has.tpe(target),    s"$this target has no type:\n${Tree.showTypes(target)}")
         assert(are.defined(args),  s"Not all $this args are defined")
@@ -179,22 +166,25 @@ trait Terms { this: AST =>
         setType(app, target.tpe.resultType)
       }
 
-      def apply(target: u.Tree, targs: u.Type*)(argss: Seq[u.Tree]*): u.Tree = {
-        assert(is.defined(target), s"$this target is not defined: $target")
-        assert(has.tpe(target), s"$this target has no type:\n${Tree.showTypes(target)}")
+      def apply(target: u.Tree,
+        targs: Seq[u.Type]      = Seq.empty,
+        argss: Seq[Seq[u.Tree]] = Seq.empty
+      ): u.Tree = {
+        assert(is.defined(target), s"$this target is not defined")
+        assert(has.tpe(target),    s"$this target has no type:\n${Tree.showTypes(target)}")
         if (targs.isEmpty) {
-          if (argss.isEmpty) Tree.copy(target)(tpe = target.tpe.resultType)
+          if (argss.isEmpty) Tree.With(target)(tpe = target.tpe.resultType)
           else argss.foldLeft(target)(apply)
-        } else apply(TypeApp(target, targs: _*))(argss: _*)
+        } else apply(TypeApp(target, targs), argss = argss)
       }
 
-      def unapplySeq(tree: u.Tree): Option[(u.Tree, Seq[u.Type], Seq[Seq[u.Tree]])] = tree match {
-        case u.Apply(TermApp(target, targs, argss@_*), args) =>
+      def unapply(tree: u.Tree): Option[(u.Tree, Seq[u.Type], Seq[Seq[u.Tree]])] = tree match {
+        case u.Apply(TermApp(target, targs, argss), args) =>
           Some(target, targs, argss :+ cleanVarArgs(args))
         case u.Apply(target, args) =>
-          Some(target, Nil, Seq(cleanVarArgs(args)))
-        case TypeApp(target, targs@_*) =>
-          Some(target, targs, Nil)
+          Some(target, Seq.empty, Seq(cleanVarArgs(args)))
+        case TypeApp(target, targs) =>
+          Some(target, targs, Seq.empty)
         case _ => None
       }
 
@@ -208,19 +198,17 @@ trait Terms { this: AST =>
     /** Type applications (for internal use). */
     private[ast] object TypeApp extends Node {
 
-      def apply(target: u.Tree, targs: u.Type*): u.TypeApply = {
-        assert(is.defined(target), s"$this target is not defined: $target")
-        assert(has.tpe(target), s"$this target has no type:\n${Tree.showTypes(target)}")
-        assert(targs.nonEmpty, s"No type args supplied to $this")
+      def apply(target: u.Tree, targs: Seq[u.Type] = Seq.empty): u.TypeApply = {
+        assert(is.defined(target), s"$this target is not defined")
+        assert(has.tpe(target),    s"$this target has no type:\n${Tree.showTypes(target)}")
+        assert(targs.nonEmpty,     s"No type args supplied to $this")
         assert(targs.forall(is.defined), s"Not all $this type args are defined")
-
         val tpts = targs.map(TypeQuote(_)).toList
         val tapp = u.TypeApply(target, tpts)
-        set(tapp, tpe = Type(target.tpe, targs: _*))
-        tapp
+        setType(tapp, Type(target.tpe, targs))
       }
 
-      def unapplySeq(tapp: u.TypeApply): Option[(u.Tree, Seq[u.Type])] =
+      def unapply(tapp: u.TypeApply): Option[(u.Tree, Seq[u.Type])] =
         Some(tapp.fun, tapp.args.map(_.tpe))
     }
 
@@ -275,9 +263,9 @@ trait Terms { this: AST =>
     /** Atomic terms (literals, references and `this`). */
     object Atomic extends Node {
       def unapply(tree: u.Tree): Option[u.Tree] = tree match {
-        case lit @ Lit(_) => Some(lit)
+        case lit @ Lit(_)     => Some(lit)
         case ref @ TermRef(_) => Some(ref)
-        case ths @ This(_) => Some(ths)
+        case ths @ This(_)    => Some(ths)
         case _ => None
       }
     }
@@ -291,37 +279,36 @@ trait Terms { this: AST =>
        * @return `value`.
        */
       def apply(value: Any): u.Literal = {
-        val const = u.Constant(value)
-        val tpe = if (() == value) Type.unit else constantType(const)
-        val lit = u.Literal(const)
-        set(lit, tpe = tpe)
-        lit
+        val cst = u.Constant(value)
+        val lit = u.Literal(cst)
+        setType(lit, if (() == value) Type.unit else constantType(cst))
       }
 
       def unapply(lit: u.Literal): Option[Any] =
         Some(lit.value.value)
     }
 
-    /** `this` references to enclosing classes or objects. */
+    /** This references to enclosing classes or objects. */
     object This extends Node {
 
       /**
-       * Creates a type-checked `this` reference.
-       * @param sym The symbol of the enclosing class or object.
-       * @return `this.sym`.
+       * Creates a type-checked this reference.
+       * @param encl The symbol of the enclosing class or object.
+       * @return `encl.this`.
        */
-      def apply(sym: u.Symbol): u.This = {
-        assert(is.defined(sym), s"$this `$sym` is not defined")
-        assert(has.name(sym), s"$this `$sym` has no name")
-        assert(is.clazz(sym) || is.module(sym), s"$this `$sym` is neither a class nor a module")
-
-        val ths = u.This(if (is.clazz(sym)) sym.asType.name else TypeName.empty)
-        set(ths, sym = sym, tpe = Type.thisOf(sym))
-        ths
+      def apply(encl: u.Symbol): u.This = {
+        assert(is.defined(encl), s"$this is not defined")
+        assert(has.name(encl),   s"$this $encl has no name")
+        assert(encl.isClass || encl.isModule, s"$this $encl is neither a class nor a module")
+        val (sym, nme) = if (encl.isClass) encl -> encl.name.toTypeName
+          else encl.asModule.moduleClass -> TypeName.empty
+        val ths = u.This(nme)
+        setSymbol(ths, sym)
+        setType(ths, thisType(sym))
       }
 
       def unapply(ths: u.This): Option[u.Symbol] =
-        for (ths <- Option(ths) if has.sym(ths)) yield ths.symbol
+        Option(ths).filter(has.sym).map(_.symbol)
     }
 
     /** Type ascriptions. */
@@ -334,12 +321,13 @@ trait Terms { this: AST =>
        * @return `expr: tpe`.
        */
       def apply(expr: u.Tree, tpe: u.Type): u.Typed = {
-        assert(is.defined(expr), s"$this expr is not defined: $expr")
-        assert(is.term(expr), s"$this expr is not a term:\n${Tree.show(expr)}")
-        assert(has.tpe(expr), s"$this expr has no type:\n${Tree.showTypes(expr)}")
-        assert(is.defined(tpe), s"$this type `$tpe` is not defined")
-        assert(expr.tpe <:< tpe, s"Type `${expr.tpe}` cannot be casted to `$tpe`")
-        setType(u.Typed(expr, TypeQuote(tpe)), tpe)
+        assert(is.defined(expr), s"$this expr is not defined")
+        assert(is.term(expr),    s"$this expr is not a term:\n${Tree.show(expr)}")
+        assert(has.tpe(expr),    s"$this expr has no type:\n${Tree.showTypes(expr)}")
+        assert(is.defined(tpe),  s"$this type is not defined")
+        assert(expr.tpe <:< tpe, s"Type ${expr.tpe} cannot be casted to $tpe")
+        val tpd = u.Typed(expr, TypeQuote(tpe))
+        setType(tpd, tpe)
       }
 
       def unapply(ascr: u.Typed): Option[(u.Tree, u.Type)] = ascr match {
@@ -350,36 +338,39 @@ trait Terms { this: AST =>
       }
     }
 
-    /** `class` instantiations. */
+    /** Class instantiations. */
     object Inst extends Node {
 
       /**
-       * Creates a type-checked `class` instantiation.
+       * Creates a type-checked class instantiation.
        * @param target The type of the class to instantiate (might be path-dependent).
-       * @param targs The type arguments (if `target` is generic).
-       * @param argss All argument lists (partial application not supported).
+       * @param targs  The type arguments (if `target` is generic).
+       * @param argss  All argument lists (partial application not supported).
        * @return `new target[..targs](...argss)`.
        */
-      def apply(target: u.Type, targs: u.Type*)(argss: Seq[u.Tree]*): u.Tree = {
-        assert(is.defined(target), s"$this target `$target` is not defined")
-        assert(targs.forall(is.defined), s"Not all $this type args are defined")
+      def apply(target: u.Type,
+        targs: Seq[u.Type]      = Seq.empty,
+        argss: Seq[Seq[u.Tree]] = Seq.empty
+      ): u.Tree = {
+        assert(is.defined(target),         s"$this target is not defined")
+        assert(targs.forall(is.defined),   s"Not all $this type args are defined")
         assert(are.defined(argss.flatten), s"Not all $this args are defined")
-        assert(have.tpe(argss.flatten), s"Not all $this args have type")
-
-        val clazz = Type.constructor(target)
-        val constructor = clazz.decl(TermName.init)
-        val init = Sym.resolveOverloaded(appliedType(clazz, targs: _*))(constructor)(argss: _*)
-        val tpe = Type(clazz, targs: _*)
+        assert(have.tpe(argss.flatten),    s"Not all $this args have type")
+        val cls = Type.constructor(target)
+        val ini = cls.decl(TermName.init)
+        val tpe = Type(cls, targs)
+        val ctr = Sym.resolveOverloaded(tpe, ini, argss = argss)
         val tpt = u.New(TypeQuote(tpe))
-        set(tpt, tpe = tpe)
-        val inst = TermApp(Sel(tpt, init))(argss: _*)
-        set(inst, sym = init, tpe = tpe)
-        inst
+        setType(tpt, tpe)
+        val inst = TermApp(Sel(tpt, ctr), argss = argss)
+        setSymbol(inst, ctr)
+        setType(inst, tpe)
       }
 
-      def unapplySeq(tree: u.Tree): Option[(u.Type, Seq[u.Type], Seq[Seq[u.Tree]])] = tree match {
-        case TermApp(Sel(u.New(_ withType clazz), _), _, argss@_*) withType Type.Result(_) =>
-          Some(clazz.typeConstructor, clazz.typeArgs, argss)
+      def unapply(tree: u.Tree): Option[(u.Type, Seq[u.Type], Seq[Seq[u.Tree]])] = tree match {
+        case app @ TermApp(Sel(u.New(tpt), _), _, argss) if is.result(app.tpe) =>
+          val tpe = tpt.tpe.dealias.widen
+          Some(tpe.typeConstructor, tpe.typeArgs, argss)
         case _ => None
       }
     }
@@ -390,31 +381,35 @@ trait Terms { this: AST =>
       /**
        * Creates a type-checked lambda.
        * @param params The symbols of all parameters (to be copied with a new owner).
-       * @param body The function body (with parameter symbols substituted), owned by the lambda.
+       * @param body   The function body (with parameter symbols substituted), owned by the lambda.
        * @return `(..params) => body`.
        */
-      def apply(params: u.TermSymbol*)(body: u.Tree): u.Function = {
+      def apply(
+        params: Seq[u.TermSymbol] = Seq.empty,
+        body:   u.Tree            = Term.unit
+      ): u.Function = {
         assert(params.forall(is.defined), s"Not all $this parameters are defined")
-        assert(have.name(params), s"Not all $this parameters have names")
-        assert(params.forall(has.tpe), s"Not all $this parameters have types")
-        assert(is.defined(body), s"$this body is not defined: $body")
-        assert(is.term(body), s"$this body is not a term:\n${Tree.show(body)}")
-        assert(has.tpe(body), s"$this body has no type:\n${Tree.showTypes(body)}")
-
-        val parTs = params.map(_.info)
-        val tpe = Type.fun(parTs: _*)(body.tpe)
+        assert(have.name(params),         s"Not all $this parameters have names")
+        assert(params.forall(has.tpe),    s"Not all $this parameters have types")
+        assert(is.defined(body), s"$this body is not defined")
+        assert(is.term(body),    s"$this body is not a term:\n${Tree.show(body)}")
+        assert(has.tpe(body),    s"$this body has no type:\n${Tree.showTypes(body)}")
+        val pts = params.map(_.info)
+        val tpe = Type.fun(pts, body.tpe)
         val fun = TermSym.free(TermName.lambda, tpe)
-        val aliases = for ((p, t) <- params zip parTs) yield ParSym(fun, p.name, t)
-        val rhs = Sym.subst(fun, params zip aliases: _*)(body)
-        val lambda = u.Function(aliases.map(ParDef(_)).toList, rhs)
-        set(lambda, sym = fun, tpe = tpe)
-        lambda
+        val pss = for ((p, t) <- params zip pts) yield ParSym(fun, p.name, t)
+        val rhs = Sym.subst(fun, params zip pss)(body)
+        val lambda = u.Function(pss.map(ParDef(_)).toList, rhs)
+        setSymbol(lambda, fun)
+        setType(lambda, tpe)
       }
 
-      def unapply(lambda: u.Function): Option[(u.TermSymbol, Seq[u.ValDef], u.Tree)] = lambda match {
-        case u.Function(params, Term(body)) withSym TermSym(fun) => Some(fun, params, body)
-        case _ => None
-      }
+      def unapply(lambda: u.Function): Option[(u.TermSymbol, Seq[u.ValDef], u.Tree)] =
+        lambda match {
+          case u.Function(params, Term(body)) =>
+            Some(lambda.symbol.asTerm, params, body)
+          case _ => None
+        }
     }
 
     /** Blocks. */
@@ -423,22 +418,23 @@ trait Terms { this: AST =>
       /**
        * Creates a type-checked block.
        * @param stats Statements (`Unit`s are filtered out).
-       * @param expr Must be a term (use `Unit` to simulate a statement block).
+       * @param expr  Must be a term (use `Unit` to simulate a statement block).
        * @return `{ ..stats; expr }`.
        */
-      def apply(stats: u.Tree*)(expr: u.Tree = Term.unit): u.Block = {
+      def apply(
+        stats: Seq[u.Tree] = Seq.empty,
+        expr:  u.Tree      = Term.unit
+      ): u.Block = {
         assert(are.defined(stats), s"Not all $this statements are defined")
-        assert(is.defined(expr), s"$this expr is not defined: $expr")
-        assert(is.term(expr), s"$this expr is not a term:\n${Tree.show(expr)}")
-        assert(has.tpe(expr), s"$this expr has no type:\n${Tree.showTypes(expr)}")
-
+        assert(is.defined(expr),   s"$this expr is not defined")
+        assert(is.term(expr),      s"$this expr is not a term:\n${Tree.show(expr)}")
+        assert(has.tpe(expr),      s"$this expr has no type:\n${Tree.showTypes(expr)}")
         val compressed = stats.filter {
           case Lit(()) => false
           case _ => true
         }.toList
         val block = u.Block(compressed, expr)
-        set(block, tpe = expr.tpe)
-        block
+        setType(block, expr.tpe)
       }
 
       def unapply(block: u.Block): Option[(Seq[u.Tree], u.Tree)] = block match {
@@ -450,31 +446,29 @@ trait Terms { this: AST =>
       }
     }
 
-    /** `if-else` branches. */
+    /** If-else branches. */
     object Branch extends Node {
 
       /**
-       * Creates a type-checked `if-else` branch.
+       * Creates a type-checked if-else branch.
        * @param cond Must be a boolean expression.
-       * @param thn Then branch (must be a term).
-       * @param els Else branch (must be a term) - use `Unit` for one-sided branches.
+       * @param thn  Then branch (must be a term).
+       * @param els  Else branch (must be a term) - use `Unit` for one-sided branches.
        * @return `if (cond) thn else els`.
        */
       def apply(cond: u.Tree, thn: u.Tree, els: u.Tree = Term.unit): u.If = {
-        assert(is.defined(cond), s"$this condition is not defined: $cond")
-        assert(is.defined(thn), s"$this then is not defined: $thn")
-        assert(is.defined(els), s"$this else is not defined: $els")
+        assert(is.defined(cond), s"$this condition is not defined")
+        assert(is.defined(thn),  s"$this then is not defined")
+        assert(is.defined(els),  s"$this else is not defined")
         assert(is.term(cond), s"$this condition is not a term:\n${Tree.show(cond)}")
-        assert(is.term(thn), s"$this then is not a term:\n${Tree.show(thn)}")
-        assert(is.term(els), s"$this else is not a term:\n${Tree.show(els)}")
+        assert(is.term(thn),  s"$this then is not a term:\n${Tree.show(thn)}")
+        assert(is.term(els),  s"$this else is not a term:\n${Tree.show(els)}")
         assert(has.tpe(cond), s"$this condition has no type:\n${Tree.showTypes(cond)}")
-        assert(has.tpe(thn), s"$this then has no type:\n${Tree.showTypes(thn)}")
-        assert(has.tpe(els), s"$this else has no type:\n${Tree.showTypes(els)}")
+        assert(has.tpe(thn),  s"$this then has no type:\n${Tree.showTypes(thn)}")
+        assert(has.tpe(els),  s"$this else has no type:\n${Tree.showTypes(els)}")
         assert(cond.tpe <:< Type.bool, s"$this condition is not boolean:\n${Tree.showTypes(cond)}")
-
         val branch = u.If(cond, thn, els)
-        set(branch, tpe = Type.lub(thn.tpe, els.tpe))
-        branch
+        setType(branch, Type.lub(Seq(thn.tpe, els.tpe)))
       }
 
       def unapply(branch: u.If): Option[(u.Tree, u.Tree, u.Tree)] = branch match {

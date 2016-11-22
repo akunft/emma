@@ -16,11 +16,11 @@
 package org.emmalanguage
 package ast
 
-/** Values (`val`s). */
+/** Values. */
 trait Values { this: AST =>
 
   /**
-   * Values (`val`s).
+   * Values.
    *
    * === Examples ===
    * {{{
@@ -36,34 +36,37 @@ trait Values { this: AST =>
    */
   trait ValueAPI { this: API =>
 
-    import u.Flag._
+    import universe._
+    import Flag._
 
-    /** Value (`val`) symbols. */
+    /** Value symbols. */
     object ValSym extends Node {
 
       /**
-       * Creates a new value symbol.
-       * @param owner The enclosing named entity where this value is defined.
-       * @param name The name of this value (will be encoded).
+       * Creates a type-checked value symbol.
+       * @param own The enclosing named entity where this value is defined.
+       * @param nme The name of this value (will be encoded).
        * @param tpe The type of this value (will be dealiased and widened).
-       * @param flags Any additional modifiers (cannot be mutable or parameter).
+       * @param flg Any (optional) modifiers (e.g. lazy, implicit).
        * @param pos The (optional) source code position where this value is defined.
-       * @return A new value symbol.
+       * @param ans Any (optional) annotations associated with this value.
+       * @return A new type-checked value symbol.
        */
-      def apply(owner: u.Symbol, name: u.TermName, tpe: u.Type,
-        flags: u.FlagSet = u.NoFlags,
-        pos: u.Position = u.NoPosition): u.TermSymbol = {
-
-        assert(are.not(MUTABLE)(flags), s"$this `$name` cannot be mutable")
-        assert(are.not(PARAM)(flags), s"$this `$name` cannot be a parameter")
-        BindingSym(owner, name, tpe, flags, pos)
+      def apply(own: u.Symbol, nme: u.TermName, tpe: u.Type,
+        flg: u.FlagSet         = u.NoFlags,
+        pos: u.Position        = u.NoPosition,
+        ans: Seq[u.Annotation] = Seq.empty
+      ): u.TermSymbol = {
+        assert(are.not(MUTABLE)(flg), s"$this $nme cannot be mutable")
+        assert(are.not(PARAM)(flg),   s"$this $nme cannot be a parameter")
+        BindingSym(own, nme, tpe, flg, pos, ans)
       }
 
       def unapply(sym: u.TermSymbol): Option[u.TermSymbol] =
         Option(sym).filter(is.value)
     }
 
-    /** Value (`val`) references. */
+    /** Value references. */
     object ValRef extends Node {
 
       /**
@@ -72,8 +75,8 @@ trait Values { this: AST =>
        * @return `target`.
        */
       def apply(target: u.TermSymbol): u.Ident = {
-        assert(is.defined(target), s"$this target `$target` is not defined")
-        assert(is.value(target), s"$this target `$target` is not a value")
+        assert(is.defined(target), s"$this target is not defined")
+        assert(is.value(target),   s"$this target $target is not a value")
         BindingRef(target)
       }
 
@@ -83,27 +86,24 @@ trait Values { this: AST =>
       }
     }
 
-    /** Value (`val`) definitions. */
+    /** Value definitions. */
     object ValDef extends Node {
 
       /**
        * Creates a type-checked value definition.
        * @param lhs Must be a value symbol.
        * @param rhs The RHS of this value, owned by `lhs`.
-       * @param flags Any additional modifiers (cannot be mutable or parameter).
-       * @return `..flags val lhs = rhs`.
+       * @return `val lhs = rhs`.
        */
-      def apply(lhs: u.TermSymbol, rhs: u.Tree, flags: u.FlagSet = u.NoFlags): u.ValDef = {
-        assert(is.defined(lhs), s"$this LHS `$lhs` is not defined")
-        assert(is.value(lhs), s"$this LHS `$lhs` is not a value")
-        assert(are.not(MUTABLE)(flags), s"$this LHS `$lhs` cannot be mutable")
-        assert(are.not(PARAM)(flags), s"$this LHS `$lhs` cannot be a parameter")
-        assert(is.defined(rhs), s"$this RHS is not defined: $rhs")
-        BindingDef(lhs, rhs, flags)
+      def apply(lhs: u.TermSymbol, rhs: u.Tree): u.ValDef = {
+        assert(is.defined(lhs), s"$this LHS is not defined")
+        assert(is.value(lhs),   s"$this LHS $lhs is not a value")
+        assert(is.defined(rhs), s"$this RHS is not defined")
+        BindingDef(lhs, rhs)
       }
 
-      def unapply(bind: u.ValDef): Option[(u.TermSymbol, u.Tree, u.FlagSet)] = bind match {
-        case BindingDef(ValSym(lhs), rhs, flags) => Some(lhs, rhs, flags)
+      def unapply(bind: u.ValDef): Option[(u.TermSymbol, u.Tree)] = bind match {
+        case BindingDef(ValSym(lhs), Term(rhs)) => Some(lhs, rhs)
         case _ => None
       }
     }

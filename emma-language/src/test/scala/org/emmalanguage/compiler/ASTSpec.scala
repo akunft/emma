@@ -66,7 +66,7 @@ class ASTSpec extends BaseCompilerSpec {
   "dynamic objects should" - {
     "remain qualified" in {
       val bal = api.Type.check(u.reify { Bal }.tree)
-      val ref = api.TermRef(api.TermSym.of(bal))
+      val ref = api.TermRef(bal.symbol.asTerm)
       val act = unQualifyStatics(bal)
       act should not be alphaEqTo (ref)
     }

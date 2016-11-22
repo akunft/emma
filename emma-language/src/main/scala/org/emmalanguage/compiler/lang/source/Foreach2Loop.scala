@@ -77,7 +77,7 @@ private[source] trait Foreach2Loop extends Common {
             (Some(src.DefCall(xs)(FM.map, arg.info, Repr)(Seq(id), Seq(cbf.get))), Repr)
           } else (xs, xsTpe)
           val toIter = tpe.member(api.TermName("toIterator")).asTerm
-          val Iter = api.Type.result(toIter.infoIn(tpe))
+          val Iter = toIter.infoIn(tpe).finalResultType
           val iter = api.ValSym(owner, fresh("iter"), Iter)
           val target = Some(src.ValRef(iter))
           val hasNext = Iter.member(api.TermName("hasNext")).asTerm

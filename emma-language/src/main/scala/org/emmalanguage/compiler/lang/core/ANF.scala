@@ -90,7 +90,7 @@ private[core] trait ANF extends Common {
           }
 
         // Simplify target
-        case Attr.inh(src.ModuleAcc(target, module) withType tpe, owner :: _) =>
+        case Attr.inh(src.ModAcc(target, module) withType tpe, owner :: _) =>
           val (stats, expr) = decompose(target, unline = false)
           val nme = api.TermName.fresh(module)
           val lhs = api.ValSym(owner, nme, tpe)
@@ -125,7 +125,7 @@ private[core] trait ANF extends Common {
         // Simplify arguments
         case Attr.inh(src.Inst(clazz, targs, argss@_*) withType tpe, owner :: _) =>
           val (stats, exprss) = decompose(argss, unline = false)
-          val nme = api.TermName.fresh(api.Sym.of(clazz))
+          val nme = api.TermName.fresh(clazz.typeSymbol)
           val lhs = api.ValSym(owner, nme, tpe)
           val rhs = core.Inst(clazz, targs: _*)(exprss: _*)
           val dfn = core.ValDef(lhs, rhs)

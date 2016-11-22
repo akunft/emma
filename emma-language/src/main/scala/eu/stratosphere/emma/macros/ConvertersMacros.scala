@@ -75,14 +75,15 @@ class ConvertersMacros(val c: blackbox.Context) extends MacroAST {
   def toCSV(T: Type, value: Tree): Tree = {
     if (T <:< api.Type[Product]) {
       val method = T.decl(api.TermName.init).alternatives.head.asMethod
-      val params = method.typeSignatureIn(T).paramLists.head
+      val tpSign = api.Type.signature(method, in = T)
+      val params = tpSign.paramLists.head
       val fields = for {
         param <- params
         method <- T.members
         if method.isMethod
         if method.asMethod.isGetter
         if method.toString == param.toString
-      } yield toCSV(api.Type.result(method.infoIn(T)), q"$value.$method")
+      } yield toCSV(tpSign.finalResultType, q"$value.$method")
 
       q"$seq(..$fields).flatten"
     } else {
