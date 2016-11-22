@@ -501,7 +501,7 @@ private[comprehension] trait Combination extends Common {
      */
     val MatchResidual: Rule = {
       case (own, cs.Comprehension(Seq(cs.Generator(x, core.Let(vs, Seq(), expr))), cs.Head(hd))) =>
-        val (fRef, fVal) = valRefAndDef(own, "f", core.Lambda(x)(hd))
+        val (fRef, fVal) = valRefAndDef(own, "f", core.Lambda(Seq(x), hd))
         val (mRef, mVal) = valRefAndDef(own, "mapped", cs.Map(expr)(fRef))
         Some(core.Let(vs ++ Seq(fVal, mVal), Seq.empty, mRef))
       case _ => None
