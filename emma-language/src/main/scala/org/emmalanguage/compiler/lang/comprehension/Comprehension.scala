@@ -60,15 +60,15 @@ trait Comprehension extends Common
       object Map extends MonadOp {
 
         override val symbol = // API: access method directly
-          api.Term.member(monad, api.TermName("map")).asMethod
+          monad.info.member(api.TermName("map")).asMethod
 
         override def apply(xs: u.Tree)(f: u.Tree): u.Tree = {
           assert(xs.tpe.typeConstructor == API.DataBag)
-          core.DefCall(Some(xs))(symbol, elemTpe(f))(Seq(f))
+          core.DefCall(Some(xs), symbol, Seq(elemTpe(f)), Seq(Seq(f)))
         }
 
         override def unapply(apply: u.Tree): Option[(u.Tree, u.Tree)] = apply match {
-          case core.DefCall(Some(xs), `symbol`, _, Seq(f)) => Some(xs, f)
+          case core.DefCall(Some(xs), `symbol`, _, Seq(Seq(f))) => Some(xs, f)
           case _ => None
         }
 
@@ -80,15 +80,15 @@ trait Comprehension extends Common
       object FlatMap extends MonadOp {
 
         override val symbol = // API: access method directly
-          api.Term.member(monad, api.TermName("flatMap")).asMethod
+          monad.info.member(api.TermName("flatMap")).asMethod
 
         override def apply(xs: u.Tree)(f: u.Tree): u.Tree = {
           assert(api.Type.arg(2, f.tpe).typeConstructor == API.DataBag)
-          core.DefCall(Some(xs))(symbol, elemTpe(f))(Seq(f))
+          core.DefCall(Some(xs), symbol, Seq(elemTpe(f)), Seq(Seq(f)))
         }
 
         override def unapply(tree: u.Tree): Option[(u.Tree, u.Tree)] = tree match {
-          case core.DefCall(Some(xs), `symbol`, _, Seq(f)) => Some(xs, f)
+          case core.DefCall(Some(xs), `symbol`, _, Seq(Seq(f))) => Some(xs, f)
           case _ => None
         }
 
@@ -100,13 +100,13 @@ trait Comprehension extends Common
       object WithFilter extends MonadOp {
 
         override val symbol = // API: access method directly
-          api.Term.member(monad, api.TermName("withFilter")).asMethod
+          monad.info.member(api.TermName("withFilter")).asMethod
 
         override def apply(xs: u.Tree)(p: u.Tree): u.Tree =
-          core.DefCall(Some(xs))(symbol)(Seq(p))
+          core.DefCall(Some(xs), symbol, Seq.empty, Seq(Seq(p)))
 
         override def unapply(tree: u.Tree): Option[(u.Tree, u.Tree)] = tree match {
-          case core.DefCall(Some(xs), `symbol`, _, Seq(p)) => Some(xs, p)
+          case core.DefCall(Some(xs), `symbol`, _, Seq(Seq(p))) => Some(xs, p)
           case _ => None
         }
       }
@@ -120,8 +120,8 @@ trait Comprehension extends Common
         val symbol = ComprehensionSyntax.comprehension
 
         def apply(qs: Seq[u.Tree], hd: u.Tree): u.Tree = {
-          val args = Seq(api.Block(qs:_*)(hd))
-          core.DefCall(module)(symbol, elemTpe(hd), Monad)(args)
+          val args = Seq(api.Block(qs, hd))
+          core.DefCall(module, symbol, Seq(elemTpe(hd), Monad), Seq(args))
         }
 
         def unapply(tree: u.Tree): Option[(Seq[u.Tree], u.Tree)] = tree match {
@@ -142,7 +142,7 @@ trait Comprehension extends Common
           core.ValDef(lhs, core.DefCall(module)(symbol, elemTpe(rhs), Monad)(Seq(rhs)))
 
         def unapply(tree: u.ValDef): Option[(u.TermSymbol, u.Block)] = tree match {
-          case core.ValDef(lhs, core.DefCall(_, `symbol`, _, Seq(arg: u.Block)), _) =>
+          case core.ValDef(lhs, core.DefCall(_, `symbol`, _, Seq(arg: u.Block))) =>
             Some(lhs, arg)
           case _ =>
             None
@@ -218,7 +218,7 @@ trait Comprehension extends Common
           core.DefCall(module)(symbol, Core.bagElemTpe(xs), Core.bagElemTpe(ys))(Seq(xs, ys))
 
         def unapply(apply: u.Tree): Option[(u.Tree, u.Tree)] = apply match {
-          case core.DefCall(_, `symbol`, _, Seq(xs, ys)) => Some(xs, ys)
+          case core.DefCall(_, `symbol`, _, Seq(Seq(xs, ys))) => Some(xs, ys)
           case _ => None
         }
       }
@@ -237,7 +237,7 @@ trait Comprehension extends Common
         }
 
         def unapply(apply: u.Tree): Option[(u.Tree, u.Tree, u.Tree, u.Tree)] = apply match {
-          case core.DefCall(_, `symbol`, _, Seq(kx, ky), Seq(xs, ys)) => Some(kx, ky, xs, ys)
+          case core.DefCall(_, `symbol`, _, Seq(Seq(kx, ky), Seq(xs, ys))) => Some(kx, ky, xs, ys)
           case _ => None
         }
       }
@@ -299,9 +299,9 @@ trait Comprehension extends Common
 
       def prepend(let: u.Tree): u.Block = let match {
         case core.Let(suffix, defs, expr) =>
-          core.Let(prefix ++ suffix: _*)(defs: _*)(expr)
+          core.Let(prefix ++ suffix, defs, expr)
         case expr =>
-          core.Let(prefix: _*)()(expr)
+          core.Let(prefix, Seq.empty, expr)
       }
 
       tree match {
